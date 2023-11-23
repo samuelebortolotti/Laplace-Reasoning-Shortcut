@@ -135,15 +135,22 @@ class LLLaplace(ParametricLaplace):
         return (f_mu.detach(), f_var.detach()) if not self.enable_backprop else (f_mu, f_var)
 
     def _nn_predictive_samples(self, X, n_samples=100):
+        # List of models: works only with our specific model
+        self.model.model.model_possibilities = [None] * n_samples
         fs = list()
         for sample in self.sample(n_samples):
             vector_to_parameters(sample, self.model.last_layer.parameters())
             f = self.model(X.to(self._device))
             fs.append(f.detach() if not self.enable_backprop else f)
+            # Adding that sample
+            self.model.model.model_possibilities[i] = sample
+
         vector_to_parameters(self.mean, self.model.last_layer.parameters())
         fs = torch.stack(fs)
+
         if self.likelihood == 'classification':
-            fs = torch.softmax(fs, dim=-1)
+            # fs = torch.softmax(fs, dim=-1) -> we will deal with it in our SOP task
+            pass
         return fs
 
     @property

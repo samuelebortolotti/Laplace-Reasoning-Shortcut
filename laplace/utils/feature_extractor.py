@@ -140,6 +140,9 @@ class FeatureExtractor(nn.Module):
         keys = list(act_out.keys())
         for key in reversed(keys):
             layer = dict(self.model.named_modules())[key]
+            # Works only with our specific structured-output-prediction model
+            if key != 'original_model.encoder.dense_c':
+                continue
             if len(list(layer.children())) == 0:
                 self.set_last_layer(key)
 
