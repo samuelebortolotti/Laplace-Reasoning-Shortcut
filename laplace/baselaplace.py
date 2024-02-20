@@ -43,7 +43,7 @@ class BaseLaplace:
     """
     def __init__(self, model, likelihood, sigma_noise=1., prior_precision=1.,
                  prior_mean=0., temperature=1., enable_backprop=False,
-                 backend=None, backend_kwargs=None):
+                 backend=None, backend_kwargs=None, boia=False):
         if likelihood not in ['classification', 'regression']:
             raise ValueError(f'Invalid likelihood type {likelihood}')
 
@@ -60,12 +60,12 @@ class BaseLaplace:
         self.sigma_noise = sigma_noise
         self.temperature = temperature
         self.enable_backprop = enable_backprop
-
         if backend is None:
             backend = AsdlGGN if likelihood == 'classification' else BackPackGGN
         self._backend = None
         self._backend_cls = backend
         self._backend_kwargs = dict() if backend_kwargs is None else backend_kwargs
+        self._backend_kwargs.update({'boia': boia})
 
         # log likelihood = g(loss)
         self.loss = 0.

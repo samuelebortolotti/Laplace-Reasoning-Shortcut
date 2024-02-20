@@ -1,6 +1,30 @@
 import torch
-from torch.nn import MSELoss, CrossEntropyLoss
+from torch.nn import MSELoss, CrossEntropyLoss, BCELoss
+import torch.nn.functional as F
 
+def BCE_forloop(tar,pred):
+    loss = F.binary_cross_entropy(tar[0, :4], pred[0, :4])
+    
+    for i in range(1,len(tar)):
+        loss = loss + F.binary_cross_entropy(tar[i, :4], pred[i, :4])
+    return loss
+
+def CE_forloop(y_pred, y_true):
+    y_trues = torch.split(y_true, 1, dim=-1)
+    y_preds = torch.split(y_pred, 2, dim=-1)
+
+    loss = 0
+    for i in range(4):
+        
+        true = y_trues[i].view(-1)
+        pred = y_preds[i]
+
+        loss_i = F.nll_loss( pred.log(), true.to(torch.long) )
+        loss += loss_i / 4
+
+        assert loss_i > 0, pred.log() 
+    
+    return loss
 
 class CurvatureInterface:
     """Interface to access curvature for a model and corresponding likelihood.
@@ -27,7 +51,7 @@ class CurvatureInterface:
         conversion factor between torch losses and base likelihoods
         For example, \\(\\frac{1}{2}\\) to get to \\(\\mathcal{N}(f, 1)\\) from MSELoss.
     """
-    def __init__(self, model, likelihood, last_layer=False, subnetwork_indices=None):
+    def __init__(self, model, likelihood, last_layer=False, subnetwork_indices=None, boia=False):
         assert likelihood in ['regression', 'classification']
         self.likelihood = likelihood
         self.model = model
@@ -37,22 +61,23 @@ class CurvatureInterface:
             self.lossfunc = MSELoss(reduction='sum')
             self.factor = 0.5
         else:
-            self.lossfunc = CrossEntropyLoss(reduction='sum')
+            if boia:
+                self.lossfunc = CE_forloop
+            else: 
+                self.lossfunc = CrossEntropyLoss(reduction='sum')
             self.factor = 1.
 
     @property
     def _model(self):
         return self.model.last_layer if self.last_layer else self.model
 
-    def jacobians(self, x, enable_backprop=False):
+    def jacobians(self, x):
         """Compute Jacobians \\(\\nabla_\\theta f(x;\\theta)\\) at current parameter \\(\\theta\\).
 
         Parameters
         ----------
         x : torch.Tensor
             input data `(batch, input_shape)` on compatible device with model.
-        enable_backprop : bool, default = False
-            whether to enable backprop through the Js and f w.r.t. x
 
         Returns
         -------
@@ -63,14 +88,13 @@ class CurvatureInterface:
         """
         raise NotImplementedError
 
-    def last_layer_jacobians(self, x, enable_backprop=False):
+    def last_layer_jacobians(self, x):
         """Compute Jacobians \\(\\nabla_{\\theta_\\textrm{last}} f(x;\\theta_\\textrm{last})\\) 
         only at current last-layer parameter \\(\\theta_{\\textrm{last}}\\).
 
         Parameters
         ----------
         x : torch.Tensor
-        enable_backprop : bool, default=False
 
         Returns
         -------
@@ -81,7 +105,7 @@ class CurvatureInterface:
         """
         f, phi = self.model.forward_with_features(x)
         bsize = phi.shape[0]
-        output_size = int(f.numel() / bsize)
+        output_size = f.shape[-1]
 
         # calculate Jacobians using the feature vector 'phi'
         identity = torch.eye(output_size, device=x.device).unsqueeze(0).tile(bsize, 1, 1)
@@ -90,7 +114,7 @@ class CurvatureInterface:
         if self.model.last_layer.bias is not None:
             Js = torch.cat([Js, identity], dim=2)
 
-        return Js, f
+        return Js, f.detach()
 
     def gradients(self, x, y):
         """Compute gradients \\(\\nabla_\\theta \\ell(f(x;\\theta, y)\\) at current parameter \\(\\theta\\).
@@ -189,9 +213,9 @@ class GGNInterface(CurvatureInterface):
     stochastic : bool, default=False
         Fisher if stochastic else GGN
     """
-    def __init__(self, model, likelihood, last_layer=False, subnetwork_indices=None, stochastic=False):
+    def __init__(self, model, likelihood, last_layer=False, subnetwork_indices=None, stochastic=False, boia=False):
         self.stochastic = stochastic
-        super().__init__(model, likelihood, last_layer, subnetwork_indices)
+        super().__init__(model, likelihood, last_layer, subnetwork_indices, boia)
 
     def _get_full_ggn(self, Js, f, y):
         """Compute full GGN from Jacobians.

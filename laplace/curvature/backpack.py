@@ -11,8 +11,8 @@ from laplace.utils import Kron
 class BackPackInterface(CurvatureInterface):
     """Interface for Backpack backend.
     """
-    def __init__(self, model, likelihood, last_layer=False, subnetwork_indices=None):
-        super().__init__(model, likelihood, last_layer, subnetwork_indices)
+    def __init__(self, model, likelihood, last_layer=False, subnetwork_indices=None, boia=False):
+        super().__init__(model, likelihood, last_layer, subnetwork_indices, boia)
         extend(self._model)
         extend(self.lossfunc)
 
@@ -99,8 +99,8 @@ class BackPackInterface(CurvatureInterface):
 class BackPackGGN(BackPackInterface, GGNInterface):
     """Implementation of the `GGNInterface` using Backpack.
     """
-    def __init__(self, model, likelihood, last_layer=False, subnetwork_indices=None, stochastic=False):
-        super().__init__(model, likelihood, last_layer, subnetwork_indices)
+    def __init__(self, model, likelihood, last_layer=False, subnetwork_indices=None, stochastic=False, boia=False):
+        super().__init__(model, likelihood, last_layer, subnetwork_indices, boia)
         self.stochastic = stochastic
 
     def _get_diag_ggn(self):
@@ -136,7 +136,7 @@ class BackPackGGN(BackPackInterface, GGNInterface):
 
         return self.factor * loss.detach(), self.factor * dggn
 
-    def kron(self, X, y, N, **kwargs) -> [torch.Tensor, Kron]:
+    def kron(self, X, y, N, **kwargs):
         context = KFAC if self.stochastic else KFLR
         f = self.model(X)
         loss = self.lossfunc(f, y)

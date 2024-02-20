@@ -24,14 +24,10 @@ class FeatureExtractor(nn.Module):
         if the name of the last layer is already known, otherwise it will
         be determined automatically.
     """
-    def __init__(
-        self, model: nn.Module, last_layer_name: Optional[str] = None, 
-        enable_backprop: bool = False) -> None:
+    def __init__(self, model: nn.Module, last_layer_name: Optional[str] = None) -> None:
         super().__init__()
         self.model = model
         self._features = dict()
-        self.enable_backprop = enable_backprop
-
         if last_layer_name is None:
             self.last_layer = None
         else:
@@ -79,6 +75,7 @@ class FeatureExtractor(nn.Module):
         """
         # set last_layer attributes and check if it is linear
         self._last_layer_name = last_layer_name
+        #print("Nome ultimo layer", self._last_layer_name)
         self.last_layer = dict(self.model.named_modules())[last_layer_name]
         if not isinstance(self.last_layer, nn.Linear):
             raise ValueError('Use model with a linear last layer.')
@@ -89,10 +86,7 @@ class FeatureExtractor(nn.Module):
     def _get_hook(self, name: str) -> Callable:
         def hook(_, input, __):
             # only accepts one input (expects linear layer)
-            self._features[name] = input[0]
-            
-            if not self.enable_backprop:
-                self._features[name] = self._features[name].detach()
+            self._features[name] = input[0].detach()
         return hook
 
     def find_last_layer(self, x: torch.Tensor) -> torch.Tensor:
@@ -138,12 +132,16 @@ class FeatureExtractor(nn.Module):
 
         # find the last layer, store features, return output of forward pass
         keys = list(act_out.keys())
+
+        #print("Le chiavi sono", keys)
         for key in reversed(keys):
             layer = dict(self.model.named_modules())[key]
-            # Works only with our specific structured-output-prediction model
-            if key != 'original_model.encoder.dense_c':
+
+            if key != 'original_model.encoder.dense_c' and key != 'original_model.conceptizer.enc1':
                 continue
+
             if len(list(layer.children())) == 0:
+                #print("Prendo questo layer", key)
                 self.set_last_layer(key)
 
                 # save features from first forward pass
