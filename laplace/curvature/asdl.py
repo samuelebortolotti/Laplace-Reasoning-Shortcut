@@ -18,7 +18,7 @@ class AsdlInterface(CurvatureInterface):
     """Interface for asdfghjkl backend.
     """
 
-    def jacobians(self, x, enable_backprop=False):
+    def jacobians(self, x):
         """Compute Jacobians \\(\\nabla_\\theta f(x;\\theta)\\) at current parameter \\(\\theta\\)
         using asdfghjkl's gradient per output dimension.
 
@@ -26,8 +26,6 @@ class AsdlInterface(CurvatureInterface):
         ----------
         x : torch.Tensor
             input data `(batch, input_shape)` on compatible device with model.
-        enable_backprop : bool, default = False
-            whether to enable backprop through the Js and f w.r.t. x
 
         Returns
         -------
@@ -117,8 +115,6 @@ class AsdlInterface(CurvatureInterface):
         curv = fisher_for_cross_entropy(self._model, self._ggn_type, SHAPE_DIAG,
                                         inputs=X, targets=y)
         diag_ggn = curv.matrices_to_vector(None)
-        if self.subnetwork_indices is not None:
-            diag_ggn = diag_ggn[self.subnetwork_indices]
         return self.factor * loss, self.factor * diag_ggn
 
     def kron(self, X, y, N, **wkwargs):
@@ -138,8 +134,8 @@ class AsdlInterface(CurvatureInterface):
 
 class AsdlHessian(AsdlInterface):
 
-    def __init__(self, model, likelihood, last_layer=False, low_rank=10, boia=False):
-        super().__init__(model, likelihood, last_layer, None, boia)
+    def __init__(self, model, likelihood, last_layer=False, low_rank=10):
+        super().__init__(model, likelihood, last_layer)
         self.low_rank = low_rank
 
     @property
@@ -172,7 +168,7 @@ class AsdlGGN(AsdlInterface, GGNInterface):
     def __init__(self, model, likelihood, last_layer=False, subnetwork_indices=None, stochastic=False, boia=False):
         if likelihood != 'classification':
             raise ValueError('This backend only supports classification currently.')
-        super().__init__(model, likelihood, last_layer, subnetwork_indices, boia)
+        super().__init__(model, likelihood, last_layer, subnetwork_indices, False, boia)
         self.stochastic = stochastic
 
     @property

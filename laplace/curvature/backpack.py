@@ -16,7 +16,7 @@ class BackPackInterface(CurvatureInterface):
         extend(self._model)
         extend(self.lossfunc)
 
-    def jacobians(self, x, enable_backprop=False):
+    def jacobians(self, x):
         """Compute Jacobians \\(\\nabla_{\\theta} f(x;\\theta)\\) at current parameter \\(\\theta\\)
         using backpack's BatchGrad per output dimension.
 
@@ -24,8 +24,6 @@ class BackPackInterface(CurvatureInterface):
         ----------
         x : torch.Tensor
             input data `(batch, input_shape)` on compatible device with model.
-        enable_backprop : bool, default = False
-            whether to enable backprop through the Js and f w.r.t. x
 
         Returns
         -------
@@ -41,25 +39,19 @@ class BackPackInterface(CurvatureInterface):
             out = model(x)
             with backpack(BatchGrad()):
                 if model.output_size > 1:
-                    out[:, i].sum().backward(
-                        create_graph=enable_backprop, 
-                        retain_graph=enable_backprop
-                    )
+                    out[:, i].sum().backward()
                 else:
-                    out.sum().backward(
-                        create_graph=enable_backprop, 
-                        retain_graph=enable_backprop
-                    )
+                    out.sum().backward()
                 to_cat = []
                 for param in model.parameters():
-                    to_cat.append(param.grad_batch.reshape(x.shape[0], -1))
+                    to_cat.append(param.grad_batch.detach().reshape(x.shape[0], -1))
                     delattr(param, 'grad_batch')
                 Jk = torch.cat(to_cat, dim=1)
                 if self.subnetwork_indices is not None:
                     Jk = Jk[:, self.subnetwork_indices]
             to_stack.append(Jk)
             if i == 0:
-                f = out
+                f = out.detach()
 
         model.zero_grad()
         CTX.remove_hooks()
@@ -131,12 +123,10 @@ class BackPackGGN(BackPackInterface, GGNInterface):
         with backpack(context()):
             loss.backward()
         dggn = self._get_diag_ggn()
-        if self.subnetwork_indices is not None:
-            dggn = dggn[self.subnetwork_indices]
 
         return self.factor * loss.detach(), self.factor * dggn
 
-    def kron(self, X, y, N, **kwargs):
+    def kron(self, X, y, N, **kwargs) -> [torch.Tensor, Kron]:
         context = KFAC if self.stochastic else KFLR
         f = self.model(X)
         loss = self.lossfunc(f, y)
@@ -159,8 +149,6 @@ class BackPackEF(BackPackInterface, EFInterface):
             loss.backward()
         diag_EF = torch.cat([p.sum_grad_squared.data.flatten()
                              for p in self._model.parameters()])
-        if self.subnetwork_indices is not None:
-            diag_EF = diag_EF[self.subnetwork_indices]
 
         return self.factor * loss.detach(), self.factor * diag_EF
 

@@ -9,6 +9,7 @@ def BCE_forloop(tar,pred):
         loss = loss + F.binary_cross_entropy(tar[i, :4], pred[i, :4])
     return loss
 
+
 def CE_forloop(y_pred, y_true):
     y_trues = torch.split(y_true, 1, dim=-1)
     y_preds = torch.split(y_pred, 2, dim=-1)
